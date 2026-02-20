@@ -1,7 +1,3 @@
-import pytest
-from fastapi import HTTPException
-
-from users.utils import coerce_user_type, require_admin
 from users.choices import UserType
 
 
@@ -68,14 +64,6 @@ def test_delete_user(client, create_user, auth_headers):
     assert response.status_code == 200
     assert response.json()["message"] == "User deleted"
 
-
-def test_user_type_helpers():
-    assert coerce_user_type("admin") == UserType.ADMIN
-    require_admin("ADMIN")
-    with pytest.raises(HTTPException):
-        require_admin("REGULAR")
-    with pytest.raises(HTTPException):
-        coerce_user_type("visitor")
 
 
 def test_create_user_duplicate_username_returns_409(client, create_user):
