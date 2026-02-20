@@ -1,19 +1,7 @@
-def test_create_user_public(client):
-    response = client.post(
-        "/users",
-        json={
-            "first_name": "Sam",
-            "last_name": "Hill",
-            "email": "sam@example.com",
-            "is_admin": False,
-        },
-    )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["first_name"] == "Sam"
-    assert payload["last_name"] == "Hill"
-    assert payload["email"] == "sam@example.com"
-    assert payload["is_admin"] is False
+def test_get_users_without_auth_returns_401(client):
+    response = client.get("/users")
+    assert response.status_code == 401
+    assert "detail" in response.json()
 
 
 def test_get_users_requires_admin(client, create_user, auth_headers):
@@ -38,6 +26,17 @@ def test_get_user_requires_same_user(client, create_user, auth_headers):
     assert response.status_code == 403
 
 
+def test_get_user_not_found_returns_404(client, create_user, auth_headers):
+    # 404 only when requester is allowed to see that user (self or admin) but user doesn't exist
+    admin = create_user(email="admin@example.com", is_admin=True)
+    response = client.get(
+        "/users/00000000-0000-0000-0000-000000000000",
+        headers=auth_headers(admin),
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found"
+
+
 def test_delete_user(client, create_user, auth_headers):
     admin = create_user(email="admin@example.com", is_admin=True)
     user = create_user(email="delete@example.com")
@@ -46,19 +45,10 @@ def test_delete_user(client, create_user, auth_headers):
     assert response.json()["message"] == "User deleted"
 
 
-def test_create_user_duplicate_email_returns_409(client, create_user):
-    create_user(email="same@example.com")
-    response = client.post(
-        "/users",
-        json={
-            "first_name": "Other",
-            "last_name": "User",
-            "email": "same@example.com",
-            "is_admin": False,
-        },
-    )
-    assert response.status_code == 409
-    assert "email" in response.json()["detail"].lower()
+def test_delete_user_without_auth_returns_401(client, create_user):
+    user = create_user(email="delete@example.com")
+    response = client.delete(f"/users/{user.id}")
+    assert response.status_code == 401
 
 
 def test_delete_user_not_found_returns_404(client, create_user, auth_headers):

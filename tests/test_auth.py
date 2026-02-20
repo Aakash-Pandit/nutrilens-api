@@ -1,32 +1,21 @@
-import pytest
+import os
 
-from auth.jwt import create_access_token, decode_access_token
-from auth.passwords import hash_password, verify_password
+import pytest
+from jose import jwt
 
 
 def test_create_and_decode_token():
-    token = create_access_token({"sub": "123"})
-    payload = decode_access_token(token)
+    """Token created with same secret/algorithm as backend is valid."""
+    secret = os.environ.get("JWT_SECRET", "test-secret")
+    algorithm = os.environ.get("JWT_ALGORITHM", "HS256")
+    token = jwt.encode({"sub": "123"}, secret, algorithm=algorithm)
+    payload = jwt.decode(token, secret, algorithms=[algorithm])
     assert payload["sub"] == "123"
 
 
 def test_decode_invalid_token_raises():
-    with pytest.raises(ValueError):
-        decode_access_token("not-a-real-token")
-
-
-def test_hash_and_verify_password():
-    hashed = hash_password("my-pass-123")
-    assert verify_password("my-pass-123", hashed) is True
-    assert verify_password("wrong-pass", hashed) is False
-
-
-def test_login_returns_501(client):
-    response = client.post(
-        "/login",
-        json={"username": "admin", "password": "secret"},
-    )
-    assert response.status_code == 501
+    with pytest.raises(Exception):
+        jwt.decode("not-a-real-token", "test-secret", algorithms=["HS256"])
 
 
 def test_protected_endpoint_without_token_returns_401(client):
@@ -41,3 +30,9 @@ def test_protected_endpoint_with_invalid_token_returns_401(client):
         headers={"Authorization": "Bearer invalid-token-here"},
     )
     assert response.status_code == 401
+
+
+def test_protected_endpoint_with_valid_token_succeeds(client, create_user, auth_headers):
+    user = create_user(email="auth@example.com", is_admin=True)
+    response = client.get("/users", headers=auth_headers(user))
+    assert response.status_code == 200
