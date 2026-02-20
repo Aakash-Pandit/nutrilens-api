@@ -2,7 +2,7 @@ def test_root(client):
     response = client.get("/")
     assert response.status_code == 200
     payload = response.json()
-    assert payload["message"] == "Welcome to Policy AI Agent API"
+    assert payload["message"] == "Welcome to Nutrilens AI API"
     assert payload["version"] == "1.0.0"
 
 
