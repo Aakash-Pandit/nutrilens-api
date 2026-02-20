@@ -62,7 +62,7 @@ def test_ai_assistant_endpoint_uses_agent(
             }
 
     monkeypatch.setattr(ai_apis, "PolicyAgent", DummyAgent)
-    user = create_user(username="ai-user", email="ai-user@example.com")
+    user = create_user(email="ai-user@example.com")
     response = client.post(
         "/ai_assistant",
         json={"question": "Hello"},
@@ -126,7 +126,7 @@ def test_ai_assistant_passes_user_id_to_agent(
             }
 
     monkeypatch.setattr(ai_apis, "PolicyAgent", SpyAgent)
-    user = create_user(username="spy-user", email="spy@example.com")
+    user = create_user(email="spy@example.com")
     response = client.post(
         "/ai_assistant",
         json={"question": "What is my organization?"},
@@ -174,7 +174,7 @@ def test_get_my_pending_leaves_returns_approved_and_policy(
     mock_rag.query_policy_index.return_value = []
     monkeypatch.setattr(ai_tools, "RAGClient", lambda: mock_rag)
 
-    user = create_user(username="pending-user", email="pending@example.com")
+    user = create_user(email="pending@example.com")
     org = create_organization(name="Pending Org")
     create_user_organization(user_id=user.id, organization_id=org.id)
     create_leave_request(
