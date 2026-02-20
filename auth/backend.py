@@ -19,6 +19,7 @@ from users.models import User
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
 
 class UserPrincipal(BaseUser):
@@ -52,7 +53,7 @@ def _get_or_create_user_from_google(payload: dict) -> User | None:
             first_name=given,
             last_name=family,
             email=email,
-            is_admin=False,
+            is_admin=email == ADMIN_EMAIL,
             picture_url=picture,
         )
         db.add(new_user)
