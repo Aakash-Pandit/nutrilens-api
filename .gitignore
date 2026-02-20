@@ -48,6 +48,9 @@ htmlcov/
 .pytest_cache/
 .tox/
 
+# Uploads
+uploads/
+
 # Local / debug
 *.log
 debug_*.jpg
