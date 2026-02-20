@@ -3,6 +3,7 @@ import sys
 import uuid
 import warnings
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,13 +19,22 @@ if PROJECT_ROOT not in sys.path:
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("JWT_ALGORITHM", "HS256")
 os.environ.setdefault("JWT_EXPIRE_MINUTES", "60")
+# Use a test-only upload dir so ingredient uploads don't touch project
+_test_uploads = Path(PROJECT_ROOT) / "tests" / ".test_ingredients_uploads"
+os.environ.setdefault("INGREDIENTS_UPLOAD_DIR", str(_test_uploads))
 
 import auth.backend as auth_backend
 import database.db as db
+from jose import jwt
 
 from application.app import app as fastapi_app
-from auth.jwt import create_access_token
 from users.models import User
+
+# Test-only JWT helper: same format as backend expects (payload["sub"] = user id)
+def create_access_token(payload: dict) -> str:
+    secret = os.environ.get("JWT_SECRET", "test-secret")
+    algorithm = os.environ.get("JWT_ALGORITHM", "HS256")
+    return jwt.encode(payload, secret, algorithm=algorithm)
 
 _original_uuid_bind_processor = UUID.bind_processor
 
