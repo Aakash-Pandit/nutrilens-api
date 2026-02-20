@@ -51,3 +51,10 @@ def drop_users_table():
     User.__table__.drop(bind=engine, checkfirst=True)
     init_db()
 
+
+def drop_ingredients_table():
+    from ingredients.models import Ingredient
+
+    Ingredient.__table__.drop(bind=engine, checkfirst=True)
+    init_db()
+
