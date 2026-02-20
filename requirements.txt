@@ -4,6 +4,7 @@ pydantic==2.12.5
 python-multipart==0.0.6
 python-jose==3.5.0
 passlib[bcrypt]==1.7.4
+google-auth>=2.23.0
 bcrypt==3.2.2
 
 SQLAlchemy==2.0.25
