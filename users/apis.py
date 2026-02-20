@@ -7,8 +7,6 @@ from database.db import drop_users_table, get_db
 from users.models import (
     User,
     UserItem,
-    UserRequest,
-    UserResponse,
     UsersListResponse,
 )
 from users.utils import require_admin, require_authenticated_user
@@ -16,8 +14,9 @@ from users.utils import require_admin, require_authenticated_user
 
 @app.get("/users", response_model=UsersListResponse)
 async def get_users(request: Request, db: Session = Depends(get_db)):
-    require_authenticated_user(request)
+
     require_admin(request.user)
+
     rows = db.query(User).order_by(User.created.desc()).all()
     users = [
         UserItem(
@@ -45,13 +44,9 @@ async def get_user(
     db: Session = Depends(get_db),
 ):
     require_authenticated_user(request)
-    if request.user.user_id != user_id:
+    if (request.user.user_id != user_id) and (not request.user.is_admin):
         raise HTTPException(status_code=403, detail="User access restricted")
-    try:
-        uid = UUID(user_id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="User not found")
-    user = db.query(User).filter(User.id == uid).first()
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return UserItem(
@@ -62,34 +57,6 @@ async def get_user(
         is_admin=user.is_admin,
         picture_url=user.picture_url,
         created=user.created,
-    )
-
-
-@app.post("/users", response_model=UserResponse)
-async def create_user(user: UserRequest, db: Session = Depends(get_db)):
-    email_lower = (user.email or "").strip().lower()
-    if not email_lower:
-        raise HTTPException(status_code=400, detail="Email required")
-    if db.query(User).filter(User.email == email_lower).first():
-        raise HTTPException(status_code=409, detail="A user with this email already exists")
-    new_user = User(
-        first_name=user.first_name.strip(),
-        last_name=user.last_name.strip(),
-        email=email_lower,
-        is_admin=user.is_admin,
-        picture_url=user.picture_url or None,
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return UserResponse(
-        id=str(new_user.id),
-        first_name=new_user.first_name,
-        last_name=new_user.last_name,
-        email=new_user.email,
-        is_admin=new_user.is_admin,
-        picture_url=new_user.picture_url,
-        created=new_user.created,
     )
 
 
