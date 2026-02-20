@@ -26,6 +26,7 @@ app.add_middleware(AuthenticationMiddleware, backend=JWTAuthBackend())
 
 # Register route modules (they decorate `app` on import)
 import users.apis  # noqa: E402, F401
+import ingredients.apis  # noqa: E402, F401
 
 
 @app.on_event("startup")
