@@ -24,8 +24,6 @@ import database.db as db
 
 from application.app import app as fastapi_app
 from auth.jwt import create_access_token
-from auth.passwords import hash_password
-from users.choices import UserType
 from users.models import User
 
 _original_uuid_bind_processor = UUID.bind_processor
@@ -104,24 +102,16 @@ def create_user(db_session):
         *,
         first_name="Jane",
         last_name="Doe",
-        username="jane",
-        password="secret123",
         email="jane@example.com",
-        phone="1234567890",
-        gender="female",
-        user_type=UserType.REGULAR,
-        date_of_birth=None,
+        is_admin=False,
+        picture_url=None,
     ):
         user = User(
-            first_name=first_name.lower(),
-            last_name=last_name.lower(),
-            username=username.lower(),
-            password_hash=hash_password(password),
+            first_name=first_name,
+            last_name=last_name,
             email=email,
-            phone=phone,
-            gender=gender,
-            user_type=user_type,
-            date_of_birth=date_of_birth or datetime(1990, 1, 1),
+            is_admin=is_admin,
+            picture_url=picture_url,
         )
         db_session.add(user)
         db_session.commit()
@@ -129,4 +119,13 @@ def create_user(db_session):
         return user
 
     return _create_user
+
+
+@pytest.fixture()
+def auth_headers():
+    def _headers(user):
+        token = create_access_token({"sub": str(user.id)})
+        return {"Authorization": f"Bearer {token}"}
+
+    return _headers
 
