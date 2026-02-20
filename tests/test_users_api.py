@@ -1,105 +1,60 @@
-from users.choices import UserType
-
-
 def test_create_user_public(client):
     response = client.post(
         "/users",
         json={
             "first_name": "Sam",
             "last_name": "Hill",
-            "username": "sammy",
-            "password": "secret123",
             "email": "sam@example.com",
-            "phone": "5555551111",
-            "gender": "male",
-            "user_type": "REGULAR",
-            "date_of_birth": "1991-02-03T00:00:00",
+            "is_admin": False,
         },
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload["first_name"] == "sam"
-    assert payload["last_name"] == "hill"
-    assert payload["username"] == "sammy"
+    assert payload["first_name"] == "Sam"
+    assert payload["last_name"] == "Hill"
+    assert payload["email"] == "sam@example.com"
+    assert payload["is_admin"] is False
 
 
 def test_get_users_requires_admin(client, create_user, auth_headers):
-    admin = create_user(
-        username="admin",
-        email="admin@example.com",
-        user_type=UserType.ADMIN,
-    )
-    create_user(username="staff", email="staff@example.com")
-
+    admin = create_user(email="admin@example.com", is_admin=True)
+    create_user(email="staff@example.com")
     response = client.get("/users", headers=auth_headers(admin))
     assert response.status_code == 200
     assert response.json()["total"] == 2
 
-    regular = create_user(username="regular", email="regular@example.com")
+    regular = create_user(email="regular@example.com")
     response = client.get("/users", headers=auth_headers(regular))
     assert response.status_code == 403
 
 
 def test_get_user_requires_same_user(client, create_user, auth_headers):
-    user = create_user(username="owner", email="owner@example.com")
-    other = create_user(username="other", email="other@example.com")
-
+    user = create_user(email="owner@example.com")
+    other = create_user(email="other@example.com")
     response = client.get(f"/users/{user.id}", headers=auth_headers(user))
     assert response.status_code == 200
     assert response.json()["id"] == str(user.id)
-
     response = client.get(f"/users/{user.id}", headers=auth_headers(other))
     assert response.status_code == 403
 
 
 def test_delete_user(client, create_user, auth_headers):
-    admin = create_user(
-        username="admin",
-        email="admin@example.com",
-        user_type=UserType.ADMIN,
-    )
-    user = create_user(username="delete", email="delete@example.com")
-
+    admin = create_user(email="admin@example.com", is_admin=True)
+    user = create_user(email="delete@example.com")
     response = client.delete(f"/users/{user.id}", headers=auth_headers(admin))
     assert response.status_code == 200
     assert response.json()["message"] == "User deleted"
 
 
-
-def test_create_user_duplicate_username_returns_409(client, create_user):
-    create_user(username="existing", email="first@example.com")
-    response = client.post(
-        "/users",
-        json={
-            "first_name": "Other",
-            "last_name": "User",
-            "username": "existing",
-            "password": "secret123",
-            "email": "second@example.com",
-            "phone": "5555552222",
-            "gender": "male",
-            "user_type": "REGULAR",
-            "date_of_birth": "1992-01-01T00:00:00",
-        },
-    )
-    assert response.status_code == 409
-    assert "username" in response.json()["detail"].lower()
-
-
 def test_create_user_duplicate_email_returns_409(client, create_user):
-    create_user(username="user1", email="same@example.com")
+    create_user(email="same@example.com")
     response = client.post(
         "/users",
         json={
             "first_name": "Other",
             "last_name": "User",
-            "username": "user2",
-            "password": "secret123",
             "email": "same@example.com",
-            "phone": "5555553333",
-            "gender": "female",
-            "user_type": "REGULAR",
-            "date_of_birth": "1993-01-01T00:00:00",
+            "is_admin": False,
         },
     )
     assert response.status_code == 409
@@ -107,11 +62,7 @@ def test_create_user_duplicate_email_returns_409(client, create_user):
 
 
 def test_delete_user_not_found_returns_404(client, create_user, auth_headers):
-    admin = create_user(
-        username="admin",
-        email="admin@example.com",
-        user_type=UserType.ADMIN,
-    )
+    admin = create_user(email="admin@example.com", is_admin=True)
     response = client.delete(
         "/users/00000000-0000-0000-0000-000000000000",
         headers=auth_headers(admin),
