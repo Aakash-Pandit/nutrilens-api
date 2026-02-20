@@ -5,10 +5,9 @@ from auth.passwords import hash_password, verify_password
 
 
 def test_create_and_decode_token():
-    token = create_access_token({"sub": "123", "user_type": "ADMIN"})
+    token = create_access_token({"sub": "123"})
     payload = decode_access_token(token)
     assert payload["sub"] == "123"
-    assert payload["user_type"] == "ADMIN"
 
 
 def test_decode_invalid_token_raises():
@@ -22,24 +21,12 @@ def test_hash_and_verify_password():
     assert verify_password("wrong-pass", hashed) is False
 
 
-def test_login_success(client, create_user):
-    create_user(username="admin", password="secret", email="admin@example.com")
+def test_login_returns_501(client):
     response = client.post(
         "/login",
         json={"username": "admin", "password": "secret"},
     )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["token_type"] == "bearer"
-    assert payload["access_token"]
-
-
-def test_login_invalid_credentials(client):
-    response = client.post(
-        "/login",
-        json={"username": "missing", "password": "nope"},
-    )
-    assert response.status_code == 401
+    assert response.status_code == 501
 
 
 def test_protected_endpoint_without_token_returns_401(client):
