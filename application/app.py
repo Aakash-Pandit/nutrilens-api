@@ -27,8 +27,7 @@ app.add_middleware(AuthenticationMiddleware, backend=JWTAuthBackend())
 
 @app.on_event("startup")
 def on_startup():
-    pass
-    # init_db()
+    init_db()
 
 
 @app.delete("/admin/drop-db")
@@ -40,12 +39,6 @@ async def drop_database():
 
 @app.get("/")
 async def root():
-    from ai.image_processing import detect_text_from_image
-    text = detect_text_from_image("media/test.jpg")
-    # test()
-    print("@"*80)
-    print(text)
-    print("@"*80)
     return {
         "message": "Welcome to Nutrilens AI API",
         "version": "1.0.0",
