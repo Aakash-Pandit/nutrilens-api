@@ -23,11 +23,10 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
 
 class UserPrincipal(BaseUser):
-    def __init__(self, user_id: str, is_admin: bool, display_name: str) -> None:
-        self.user_id = user_id
+    def __init__(self, id: str, is_admin: bool, email: str) -> None:
+        self.id = id
         self.is_admin = is_admin
-        self.user_type = "ADMIN" if is_admin else "REGULAR"
-        self._display_name = display_name
+        self.email = email
 
     @property
     def is_authenticated(self) -> bool:
@@ -35,7 +34,7 @@ class UserPrincipal(BaseUser):
 
     @property
     def identity(self) -> str:
-        return self.user_id
+        return self.id
 
 
 def _get_or_create_user_from_google(payload: dict) -> User | None:
@@ -80,9 +79,9 @@ class JWTAuthBackend(AuthenticationBackend):
 
     def _principal_from_user(self, user: User) -> Tuple[AuthCredentials, UserPrincipal]:
         principal = UserPrincipal(
-            user_id=str(user.id),
+            id=str(user.id),
             is_admin=user.is_admin,
-            display_name=user.email,
+            email=user.email,
         )
         return AuthCredentials(["authenticated"]), principal
 
