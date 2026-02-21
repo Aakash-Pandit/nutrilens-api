@@ -58,3 +58,9 @@ def drop_ingredients_table():
     Ingredient.__table__.drop(bind=engine, checkfirst=True)
     init_db()
 
+
+def drop_notifications_table():
+    from notifications.models import Notification
+
+    Notification.__table__.drop(bind=engine, checkfirst=True)
+    init_db()
