@@ -22,16 +22,19 @@ class Ingredient(Base):
     __tablename__ = "ingredients"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    file_path = Column(String, nullable=False)  # path to stored image
+    file_path = Column(String, nullable=False)
+    ingredient_details = Column(String, nullable=True, default="")
+    ingredient_analysis = Column(String, nullable=True, default="")
     uploaded_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
-
     uploaded_by = relationship("User", backref="ingredients")
 
 
 class IngredientItem(BaseModel):
     id: str
     file_path: str
+    ingredient_details: str | None = None
+    ingredient_analysis: str | None = None
     uploaded_by_id: str
     uploaded_at: datetime
 
@@ -39,6 +42,8 @@ class IngredientItem(BaseModel):
 class IngredientResponse(BaseModel):
     id: str
     file_path: str
+    ingredient_details: str | None = None
+    ingredient_analysis: str | None = None
     uploaded_by_id: str
     uploaded_at: datetime
 
