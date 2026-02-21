@@ -15,12 +15,39 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: compose/Dockerfile
+    image: nutrilens-app
+    container_name: nutrilens-celery-worker
+    command: celery -A celery_app worker --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  redis:
+    image: redis:7-alpine
+    container_name: nutrilens-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
 
   postgres:
     image: pgvector/pgvector:pg16
