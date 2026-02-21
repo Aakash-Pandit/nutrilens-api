@@ -8,8 +8,6 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 
 from application.app import app
-from ai.image_processing import detect_text_from_image
-from ai.ingredients_analysis import analyze_ingredients
 from database.db import get_db, drop_ingredients_table
 from ingredients.models import (
     ALLOWED_IMAGE_CONTENT_TYPES,
@@ -17,6 +15,7 @@ from ingredients.models import (
     IngredientItem,
     IngredientsListResponse,
 )
+from ingredients.tasks import analyze_ingredient_task
 from users.utils import require_authenticated_user, require_admin
 
 UPLOAD_DIR = Path(os.getenv("INGREDIENTS_UPLOAD_DIR", "uploads/ingredients"))
@@ -62,6 +61,8 @@ async def create_ingredient(
     return IngredientItem(
         id=str(ingredient.id),
         file_path=ingredient.file_path,
+        ingredient_details=ingredient.ingredient_details,
+        ingredient_analysis=ingredient.ingredient_analysis,
         uploaded_by_id=str(ingredient.uploaded_by_id),
         uploaded_at=ingredient.uploaded_at,
     )
@@ -142,7 +143,7 @@ async def delete_ingredient(
     return {"status": "ok", "message": "Ingredient deleted"}
 
 
-@app.post("/ingredients/{ingredient_id}/analyze", response_model=IngredientItem)
+@app.post("/ingredients/{ingredient_id}/analyze", status_code=202)
 async def analyze_ingredient(
     ingredient_id: str,
     request: Request,
@@ -160,31 +161,11 @@ async def analyze_ingredient(
         raise HTTPException(status_code=403, detail="Cannot get details of another user's ingredient")
     if not os.path.isfile(ingredient.file_path):
         raise HTTPException(status_code=404, detail="Ingredient image not found")
+    if ingredient.ingredient_details and ingredient.ingredient_analysis:
+        return {"message": "Analysis already completed", "ingredient_id": ingredient_id}
 
-    details_text = ""
-    try:
-        details_text = detect_text_from_image(ingredient.file_path)
-    except Exception:
-        details_text = ""
-
-    ingredient.ingredient_details = details_text or None
-    analysis_text = ""
-    try:
-        analysis_text = analyze_ingredients(details_text)
-    except Exception:
-        analysis_text = "Analysis could not be generated."
-    ingredient.ingredient_analysis = analysis_text or None
-
-    db.commit()
-    db.refresh(ingredient)
-    return IngredientItem(
-        id=str(ingredient.id),
-        file_path=ingredient.file_path,
-        ingredient_details=ingredient.ingredient_details,
-        ingredient_analysis=ingredient.ingredient_analysis,
-        uploaded_by_id=str(ingredient.uploaded_by_id),
-        uploaded_at=ingredient.uploaded_at,
-    )
+    task = analyze_ingredient_task.delay(ingredient_id)
+    return {"message": "Analysis queued", "task_id": task.id, "ingredient_id": ingredient_id}
 
 
 @app.delete("/admin/drop-ingredients-db")
