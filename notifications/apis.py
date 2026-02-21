@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sse_starlette.sse import EventSourceResponse
 
 from application.app import app
 from database.db import get_db
@@ -14,6 +15,7 @@ from notifications.models import (
 )
 from notifications.choices import NotificationStatus
 from users.utils import require_authenticated_user
+from notifications.strem import manager
 
 
 def _notification_to_item(n: Notification) -> NotificationItem:
@@ -96,3 +98,25 @@ async def read_notifications(
     )
     db.commit()
     return {"status": "ok", "message": "Notifications marked as read", "updated_count": updated}
+
+
+@app.get("/notifications/stream/{user_id}")
+async def message_stream(request: Request, user_id: str):
+    queue = await manager.connect(user_id)
+    
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                
+                data = await queue.get()
+                yield {
+                    "event": "update",
+                    "id": "message_id",
+                    "data": data
+                }
+        finally:
+            manager.disconnect(user_id, queue)
+
+    return EventSourceResponse(event_generator())
