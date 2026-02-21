@@ -20,3 +20,8 @@ def test_root_includes_docs(client):
     payload = response.json()
     assert "docs" in payload
     assert payload["docs"] == "/docs"
+
+
+def test_drop_database_without_auth_returns_401(client):
+    response = client.delete("/admin/drop-db")
+    assert response.status_code == 401
