@@ -44,7 +44,7 @@ async def get_user(
     db: Session = Depends(get_db),
 ):
     require_authenticated_user(request)
-    if (request.user.user_id != user_id) and (not request.user.is_admin):
+    if (request.user.id != user_id) and (not request.user.is_admin):
         raise HTTPException(status_code=403, detail="User access restricted")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
