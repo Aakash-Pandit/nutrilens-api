@@ -13,4 +13,6 @@ INGREDIENTS_ANALYSIS_PROMPT = """You are a nutrition and food-safety expert. The
 
 ## Ingredients (user-provided text)
 {ingredients_text}
+
+Convert the following text into a JSON array of objects. Each object should have 'name', 'description', and 'percentage' (if available). Extract allergen info into a separate 'warnings' list.
 """
