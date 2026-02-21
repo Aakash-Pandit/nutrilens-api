@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 
 from application.app import app
+from ai.image_processing import detect_text_from_image
+from ai.ingredients_analysis import analyze_ingredients
 from database.db import get_db, drop_ingredients_table
 from ingredients.models import (
     ALLOWED_IMAGE_CONTENT_TYPES,
@@ -49,7 +51,7 @@ async def create_ingredient(
             detail=f"Image only. Allowed: {', '.join(sorted(ALLOWED_IMAGE_CONTENT_TYPES))}",
         )
     file_path = _save_upload(file)
-    user_id = UUID(request.user.user_id)
+    user_id = UUID(request.user.id)
     ingredient = Ingredient(
         file_path=file_path,
         uploaded_by_id=user_id,
@@ -76,6 +78,8 @@ async def list_ingredients(
         IngredientItem(
             id=str(r.id),
             file_path=r.file_path,
+            ingredient_details=r.ingredient_details,
+            ingredient_analysis=r.ingredient_analysis,
             uploaded_by_id=str(r.uploaded_by_id),
             uploaded_at=r.uploaded_at,
         )
@@ -105,6 +109,8 @@ async def get_ingredient(
     return IngredientItem(
         id=str(ingredient.id),
         file_path=ingredient.file_path,
+        ingredient_details=ingredient.ingredient_details,
+        ingredient_analysis=ingredient.ingredient_analysis,
         uploaded_by_id=str(ingredient.uploaded_by_id),
         uploaded_at=ingredient.uploaded_at,
     )
@@ -124,7 +130,7 @@ async def delete_ingredient(
     ingredient = db.query(Ingredient).filter(Ingredient.id == uid).first()
     if not ingredient:
         raise HTTPException(status_code=404, detail="Ingredient not found")
-    if request.user.user_id != str(ingredient.uploaded_by_id) and not request.user.is_admin:
+    if request.user.id != str(ingredient.uploaded_by_id) and not request.user.is_admin:
         raise HTTPException(status_code=403, detail="Cannot delete another user's ingredient")
     if os.path.isfile(ingredient.file_path):
         try:
@@ -134,6 +140,51 @@ async def delete_ingredient(
     db.delete(ingredient)
     db.commit()
     return {"status": "ok", "message": "Ingredient deleted"}
+
+
+@app.post("/ingredients/{ingredient_id}/analyze", response_model=IngredientItem)
+async def analyze_ingredient(
+    ingredient_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_authenticated_user(request)
+    try:
+        uid = UUID(ingredient_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    ingredient = db.query(Ingredient).filter(Ingredient.id == uid).first()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    if request.user.id != str(ingredient.uploaded_by_id) and not request.user.is_admin:
+        raise HTTPException(status_code=403, detail="Cannot get details of another user's ingredient")
+    if not os.path.isfile(ingredient.file_path):
+        raise HTTPException(status_code=404, detail="Ingredient image not found")
+
+    details_text = ""
+    try:
+        details_text = detect_text_from_image(ingredient.file_path)
+    except Exception:
+        details_text = ""
+
+    ingredient.ingredient_details = details_text or None
+    analysis_text = ""
+    try:
+        analysis_text = analyze_ingredients(details_text)
+    except Exception:
+        analysis_text = "Analysis could not be generated."
+    ingredient.ingredient_analysis = analysis_text or None
+
+    db.commit()
+    db.refresh(ingredient)
+    return IngredientItem(
+        id=str(ingredient.id),
+        file_path=ingredient.file_path,
+        ingredient_details=ingredient.ingredient_details,
+        ingredient_analysis=ingredient.ingredient_analysis,
+        uploaded_by_id=str(ingredient.uploaded_by_id),
+        uploaded_at=ingredient.uploaded_at,
+    )
 
 
 @app.delete("/admin/drop-ingredients-db")
