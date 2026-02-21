@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -16,6 +17,15 @@ from notifications.models import (
 from notifications.choices import NotificationStatus
 from users.utils import require_authenticated_user
 from notifications.strem import manager
+
+
+def _get_unread_count(db: Session, user_id: UUID) -> int:
+    """Return number of notifications for user where read_at is None."""
+    return (
+        db.query(Notification)
+        .filter(Notification.recipient_id == user_id, Notification.read_at.is_(None))
+        .count()
+    )
 
 
 def _notification_to_item(n: Notification) -> NotificationItem:
@@ -97,25 +107,37 @@ async def read_notifications(
         .update({Notification.read_at: now}, synchronize_session=False)
     )
     db.commit()
+    # Push new unread count to user's active SSE connections
+    new_count = _get_unread_count(db, user_id)
+    await manager.broadcast_to_user(str(user_id), {"event": "unread_count", "unread_count": new_count})
     return {"status": "ok", "message": "Notifications marked as read", "updated_count": updated}
 
 
 @app.get("/notifications/stream/{user_id}")
-async def message_stream(request: Request, user_id: str):
+async def message_stream(
+    request: Request,
+    user_id: str,
+    db: Session = Depends(get_db),
+):
+    require_authenticated_user(request)
+    if request.user.id != user_id:
+        raise HTTPException(status_code=403, detail="Can only stream your own notifications")
     queue = await manager.connect(user_id)
-    
+    # Send current unread count as first event so client has initial state
+    initial_count = _get_unread_count(db, UUID(user_id))
+    first_event_sent = False
+
     async def event_generator():
+        nonlocal first_event_sent
         try:
+            if not first_event_sent:
+                first_event_sent = True
+                yield {"event": "unread_count", "data": json.dumps({"unread_count": initial_count})}
             while True:
                 if await request.is_disconnected():
                     break
-                
                 data = await queue.get()
-                yield {
-                    "event": "update",
-                    "id": "message_id",
-                    "data": data
-                }
+                yield {"event": data.get("event", "update"), "data": json.dumps(data)}
         finally:
             manager.disconnect(user_id, queue)
 
