@@ -28,6 +28,8 @@ import database.db as db
 from jose import jwt
 
 from application.app import app as fastapi_app
+from notifications.choices import NotificationStatus
+from notifications.models import Notification
 from users.models import User
 
 # Test-only JWT helper: same format as backend expects (payload["sub"] = user id)
@@ -138,4 +140,29 @@ def auth_headers():
         return {"Authorization": f"Bearer {token}"}
 
     return _headers
+
+
+@pytest.fixture()
+def create_notification(db_session, create_user):
+    def _create_notification(
+        *,
+        recipient=None,
+        status=NotificationStatus.SUCCESS,
+        data=None,
+        read_at=None,
+    ):
+        if recipient is None:
+            recipient = create_user(email="recipient@example.com")
+        notif = Notification(
+            recipient_id=recipient.id,
+            status=status,
+            data=data or {"ingredient_id": "test-123"},
+            read_at=read_at,
+        )
+        db_session.add(notif)
+        db_session.commit()
+        db_session.refresh(notif)
+        return notif
+
+    return _create_notification
 
