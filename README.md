@@ -103,15 +103,17 @@ Tests under `tests/` cover auth, database, and AI integration logic.
 
 ## 5. Running this project locally
 
-You can run the API directly with Python, and optionally run Celery + Redis for background tasks.
+The application is fully **Dockerized**. You are expected to run it locally using **Docker Compose**, which will start:
+
+- the FastAPI app
+- a Celery worker
+- PostgreSQL (with pgvector)
+- Redis
 
 ### 5.1. Prerequisites
 
-- **Python**: 3.11
-- **PostgreSQL** (recommended) or any DB supported by SQLAlchemy
-- **Redis** (for Celery tasks)
-- **Tesseract OCR** (for image-based ingredient extraction):
-  - On macOS (with Homebrew): `brew install tesseract`
+- **Docker** and **Docker Compose plugin** (i.e. `docker compose` available)
+- A `.env` file configured as described below (database, JWT, Cohere, etc.)
 
 You will also need a **Cohere API key** to enable AI analysis.
 
@@ -170,27 +172,17 @@ Notes:
 
 ### 5.4. Initialize the database
 
-Make sure your database server is running and accessible via `DATABASE_URL`, then start the API once so that the `lifespan` hook calls `init_db()` and creates tables:
+When you run `docker compose up --build -d`, the `postgres` service and the API will start. On first startup, FastAPI’s `lifespan` hook calls `init_db()` and creates the tables using the `DATABASE_URL` value from `.env`.
 
-```bash
-python main.py
-```
-
-After the app starts, you can optionally use the admin endpoint to drop all tables:
+After the app is up, you can optionally use the admin endpoint to drop all tables:
 
 - `DELETE /admin/drop-db` – drops all tables using `drop_db()` (use with caution).
 
 ---
 
-### 5.5. Run the API server
+### 5.5. Access the API server
 
-With your virtual environment activated and `.env` configured:
-
-```bash
-python main.py
-```
-
-The API will be available at:
+Once `docker compose up --build -d` completes successfully, the API will be available at:
 
 - **Base URL**: `http://localhost:8000/`
 - **Interactive docs (Swagger UI)**: `http://localhost:8000/docs`
@@ -200,35 +192,32 @@ Most routes require a valid JWT in the `Authorization: Bearer <token>` header, a
 
 ---
 
-### 5.6. Run Celery worker (optional but recommended)
+### 5.6. Celery worker
 
-To process background ingredient analysis tasks, start a Celery worker in a separate terminal:
+The Celery worker service (`celery-worker`) is started automatically by Docker Compose using the same image and `.env` file. You do **not** need to run Celery manually.
+
+You can inspect its status and logs with:
 
 ```bash
-source .venv/bin/activate
-celery -A celery_app.celery_app worker --loglevel=info
+docker compose ps
+docker compose logs -f celery-worker
 ```
-
-Ensure that:
-
-- `CELERY_BROKER_URL` is set and points to a running Redis instance.
-- The same `.env` file is visible to both the FastAPI process and the Celery worker.
 
 ---
 
 ### 5.7. Running tests
 
-To run the test suite:
+To run the test suite inside the `fast-api` container:
 
 ```bash
-pytest
+docker compose exec fast-api pytest
 ```
 
 The tests use temporary databases and in-memory configurations, and they may set environment variables like `TEST_DATABASE_URL`, `JWT_SECRET`, and `COHERE_API_KEY` internally.
 
 ---
 
-## 6. Docker (optional)
+## 6. Manual Docker build (alternative)
 
 A multi-stage Dockerfile is provided under `compose/Dockerfile`. It:
 
