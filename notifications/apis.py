@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 from uuid import UUID
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from application.app import app
-from database.db import get_db
+from database.db import get_db, SessionLocal
 from notifications.models import (
     Notification,
     NotificationItem,
@@ -17,6 +18,7 @@ from notifications.models import (
 from notifications.choices import NotificationStatus
 from users.utils import require_authenticated_user
 from notifications.strem import manager
+from notifications.constants import STREAM_UNREAD_COUNT_INTERVAL
 
 
 def _get_unread_count(db: Session, user_id: UUID) -> int:
@@ -123,8 +125,8 @@ async def message_stream(
     if request.user.id != user_id:
         raise HTTPException(status_code=403, detail="Can only stream your own notifications")
     queue = await manager.connect(user_id)
-    # Send current unread count as first event so client has initial state
-    initial_count = _get_unread_count(db, UUID(user_id))
+    uid = UUID(user_id)
+    initial_count = _get_unread_count(db, uid)
     first_event_sent = False
 
     async def event_generator():
@@ -136,9 +138,36 @@ async def message_stream(
             while True:
                 if await request.is_disconnected():
                     break
-                data = await queue.get()
-                yield {"event": data.get("event", "update"), "data": json.dumps(data)}
+                # Wait for either new data from queue or interval timeout
+                queue_task = asyncio.create_task(queue.get())
+                sleep_task = asyncio.create_task(asyncio.sleep(STREAM_UNREAD_COUNT_INTERVAL))
+                done, pending = await asyncio.wait(
+                    [queue_task, sleep_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for t in pending:
+                    t.cancel()
+                    try:
+                        await t
+                    except asyncio.CancelledError:
+                        pass
+                if sleep_task in done:
+                    # Interval reached: send current unread count (keeps connection alive)
+                    session = SessionLocal()
+                    try:
+                        count = _get_unread_count(session, uid)
+                        yield {"event": "unread_count", "data": json.dumps({"unread_count": count})}
+                    finally:
+                        session.close()
+                else:
+                    # Data from queue (e.g. after mark-as-read)
+                    data = queue_task.result()
+                    yield {"event": data.get("event", "update"), "data": json.dumps(data)}
         finally:
             manager.disconnect(user_id, queue)
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(
+        event_generator(),
+        ping=86400,  # 24h – keepalive is our unread_count every 15s
+        send_timeout=60,
+    )
