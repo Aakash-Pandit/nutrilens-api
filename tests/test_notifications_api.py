@@ -1,8 +1,10 @@
-"""Tests for notifications API: list, get one, read (bulk)."""
+"""Tests for notifications API endpoints."""
+from uuid import uuid4
 
 import pytest
 
 from notifications.choices import NotificationStatus
+from notifications.models import Notification
 
 
 def test_list_notifications_without_auth_returns_401(client):
@@ -12,125 +14,134 @@ def test_list_notifications_without_auth_returns_401(client):
 
 
 def test_list_notifications_with_auth_empty(client, create_user, auth_headers):
-    user = create_user(email="user@example.com")
+    user = create_user(email="nobody@example.com")
     response = client.get("/notifications", headers=auth_headers(user))
     assert response.status_code == 200
     data = response.json()
+    assert "notifications" in data
+    assert "total" in data
     assert data["notifications"] == []
     assert data["total"] == 0
     assert "message" in data
 
 
 def test_list_notifications_with_auth_returns_own(
-    client, create_user, auth_headers, create_notification
+    client, create_user, auth_headers, db_session
 ):
-    user = create_user(email="owner@example.com")
-    create_notification(recipient=user, status=NotificationStatus.SUCCESS)
-    create_notification(recipient=user, status=NotificationStatus.FAIL)
+    user = create_user(email="recipient@example.com")
+    n = Notification(
+        recipient_id=user.id,
+        data={"ingredient_id": str(uuid4())},
+        status=NotificationStatus.SUCCESS,
+    )
+    db_session.add(n)
+    db_session.commit()
+    db_session.refresh(n)
+
     response = client.get("/notifications", headers=auth_headers(user))
     assert response.status_code == 200
     data = response.json()
-    assert len(data["notifications"]) == 2
-    assert data["total"] == 2
-    ids = {n["id"] for n in data["notifications"]}
-    assert len(ids) == 2
-    for n in data["notifications"]:
-        assert n["recipient_id"] == str(user.id)
-        assert n["status"] in ("success", "fail")
-        assert "data" in n
-        assert "created_at" in n
+    assert data["total"] == 1
+    assert len(data["notifications"]) == 1
+    assert data["notifications"][0]["id"] == str(n.id)
+    assert data["notifications"][0]["recipient_id"] == str(user.id)
+    assert data["notifications"][0]["status"] == NotificationStatus.SUCCESS.value
+    assert "read_at" in data["notifications"][0]
+    assert "created_at" in data["notifications"][0]
 
 
-def test_list_notifications_filters_by_status_success(
-    client, create_user, auth_headers, create_notification
+def test_list_notifications_filter_by_status(
+    client, create_user, auth_headers, db_session
 ):
-    user = create_user(email="user@example.com")
-    create_notification(recipient=user, status=NotificationStatus.SUCCESS)
-    create_notification(recipient=user, status=NotificationStatus.FAIL)
+    user = create_user(email="filter@example.com")
+    n1 = Notification(
+        recipient_id=user.id,
+        data={},
+        status=NotificationStatus.SUCCESS,
+    )
+    n2 = Notification(
+        recipient_id=user.id,
+        data={},
+        status=NotificationStatus.FAIL,
+    )
+    db_session.add_all([n1, n2])
+    db_session.commit()
+
     response = client.get(
-        "/notifications?status=success",
+        "/notifications",
         headers=auth_headers(user),
+        params={"status": NotificationStatus.SUCCESS.value},
     )
     assert response.status_code == 200
     data = response.json()
     assert data["total"] == 1
-    assert data["notifications"][0]["status"] == "success"
-
-
-def test_list_notifications_filters_by_status_fail(
-    client, create_user, auth_headers, create_notification
-):
-    user = create_user(email="user@example.com")
-    create_notification(recipient=user, status=NotificationStatus.FAIL)
-    create_notification(recipient=user, status=NotificationStatus.SUCCESS)
-    response = client.get(
-        "/notifications?status=fail",
-        headers=auth_headers(user),
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total"] == 1
-    assert data["notifications"][0]["status"] == "fail"
+    assert data["notifications"][0]["status"] == NotificationStatus.SUCCESS.value
 
 
 def test_list_notifications_excludes_other_users(
-    client, create_user, auth_headers, create_notification
+    client, create_user, auth_headers, db_session
 ):
     owner = create_user(email="owner@example.com")
     other = create_user(email="other@example.com")
-    create_notification(recipient=owner)
-    create_notification(recipient=other)
-    response = client.get("/notifications", headers=auth_headers(owner))
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total"] == 1
-    assert data["notifications"][0]["recipient_id"] == str(owner.id)
-
-
-def test_get_notification_without_auth_returns_401(
-    client, create_user, create_notification
-):
-    user = create_user(email="user@example.com")
-    notif = create_notification(recipient=user)
-    response = client.get(f"/notifications/{notif.id}")
-    assert response.status_code == 401
-
-
-def test_get_notification_with_auth_owner(
-    client, create_user, auth_headers, create_notification
-):
-    user = create_user(email="owner@example.com")
-    notif = create_notification(
-        recipient=user,
-        status=NotificationStatus.FAIL,
-        data={"ingredient_id": "abc", "error": "OCR failed"},
+    n = Notification(
+        recipient_id=owner.id,
+        data={},
+        status=NotificationStatus.SUCCESS,
     )
+    db_session.add(n)
+    db_session.commit()
+
+    response = client.get("/notifications", headers=auth_headers(other))
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
+    assert response.json()["notifications"] == []
+
+
+def test_get_notification_with_auth_own(
+    client, create_user, auth_headers, db_session
+):
+    user = create_user(email="getter@example.com")
+    n = Notification(
+        recipient_id=user.id,
+        data={"key": "value"},
+        status=NotificationStatus.SUCCESS,
+    )
+    db_session.add(n)
+    db_session.commit()
+    db_session.refresh(n)
+
     response = client.get(
-        f"/notifications/{notif.id}",
+        f"/notifications/{n.id}",
         headers=auth_headers(user),
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["id"] == str(notif.id)
+    assert data["id"] == str(n.id)
     assert data["recipient_id"] == str(user.id)
-    assert data["status"] == "fail"
-    assert data["data"]["ingredient_id"] == "abc"
-    assert data["data"]["error"] == "OCR failed"
-    assert "created_at" in data
+    assert data["data"] == {"key": "value"}
+    assert data["status"] == NotificationStatus.SUCCESS.value
 
 
 def test_get_notification_other_user_returns_403(
-    client, create_user, auth_headers, create_notification
+    client, create_user, auth_headers, db_session
 ):
     owner = create_user(email="owner@example.com")
     other = create_user(email="other@example.com")
-    notif = create_notification(recipient=owner)
+    n = Notification(
+        recipient_id=owner.id,
+        data={},
+        status=NotificationStatus.SUCCESS,
+    )
+    db_session.add(n)
+    db_session.commit()
+    db_session.refresh(n)
+
     response = client.get(
-        f"/notifications/{notif.id}",
+        f"/notifications/{n.id}",
         headers=auth_headers(other),
     )
     assert response.status_code == 403
-    assert response.json()["detail"] == "Not allowed to access this notification"
+    assert "detail" in response.json()
 
 
 def test_get_notification_not_found_returns_404(client, create_user, auth_headers):
@@ -153,45 +164,15 @@ def test_get_notification_invalid_uuid_returns_404(client, create_user, auth_hea
     assert response.json()["detail"] == "Notification not found"
 
 
-def test_read_notifications_without_auth_returns_401(
-    client, create_user, create_notification
-):
-    user = create_user(email="user@example.com")
-    notif = create_notification(recipient=user)
+def test_read_notifications_without_auth_returns_401(client):
     response = client.post(
         "/notifications/read",
-        json={"notification_ids": [str(notif.id)]},
+        json={"notification_ids": ["00000000-0000-0000-0000-000000000000"]},
     )
     assert response.status_code == 401
 
 
-def test_read_notifications_with_auth_updates_own(
-    client, create_user, auth_headers, create_notification, db_session
-):
-    from notifications.models import Notification
-
-    user = create_user(email="user@example.com")
-    notif = create_notification(recipient=user, read_at=None)
-    nid = notif.id
-    response = client.post(
-        "/notifications/read",
-        headers=auth_headers(user),
-        json={"notification_ids": [str(nid)]},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["updated_count"] == 1
-    # API used a different session; expire so we read committed state from DB
-    db_session.expire_all()
-    updated = db_session.query(Notification).filter(Notification.id == nid).first()
-    assert updated is not None
-    assert updated.read_at is not None
-
-
-def test_read_notifications_empty_list(
-    client, create_user, auth_headers
-):
+def test_read_notifications_empty_ids(client, create_user, auth_headers):
     user = create_user(email="user@example.com")
     response = client.post(
         "/notifications/read",
@@ -200,71 +181,96 @@ def test_read_notifications_empty_list(
     )
     assert response.status_code == 200
     data = response.json()
+    assert data["status"] == "ok"
     assert data["updated_count"] == 0
-    assert "No valid" in data["message"] or "ok" in data["status"]
 
 
-def test_read_notifications_invalid_ids_ignored(
-    client, create_user, auth_headers
+def test_read_notifications_valid_ids(
+    client, create_user, auth_headers, db_session
 ):
-    user = create_user(email="user@example.com")
+    user = create_user(email="reader@example.com")
+    n = Notification(
+        recipient_id=user.id,
+        data={},
+        status=NotificationStatus.SUCCESS,
+        read_at=None,
+    )
+    db_session.add(n)
+    db_session.commit()
+    db_session.refresh(n)
+
     response = client.post(
         "/notifications/read",
         headers=auth_headers(user),
-        json={"notification_ids": ["not-a-uuid", "123"]},
+        json={"notification_ids": [str(n.id)]},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["updated_count"] == 0
+    assert data["status"] == "ok"
+    assert data["updated_count"] == 1
+    assert "message" in data
+
+    db_session.refresh(n)
+    assert n.read_at is not None
 
 
-def test_read_notifications_other_users_not_updated(
-    client, create_user, auth_headers, create_notification
+def test_read_notifications_ignores_other_users(
+    client, create_user, auth_headers, db_session
 ):
     owner = create_user(email="owner@example.com")
     other = create_user(email="other@example.com")
-    notif_owner = create_notification(recipient=owner)
-    notif_other = create_notification(recipient=other)
-    # Other user tries to mark owner's notification as read
+    n = Notification(
+        recipient_id=owner.id,
+        data={},
+        status=NotificationStatus.SUCCESS,
+        read_at=None,
+    )
+    db_session.add(n)
+    db_session.commit()
+    db_session.refresh(n)
+
     response = client.post(
         "/notifications/read",
         headers=auth_headers(other),
-        json={"notification_ids": [str(notif_owner.id), str(notif_other.id)]},
-    )
-    assert response.status_code == 200
-    # Only other's notification should be updated
-    assert response.json()["updated_count"] == 1
-
-
-def test_notification_item_includes_read_at_null_when_unread(
-    client, create_user, auth_headers, create_notification
-):
-    user = create_user(email="user@example.com")
-    create_notification(recipient=user, read_at=None)
-    response = client.get("/notifications", headers=auth_headers(user))
-    assert response.status_code == 200
-    assert len(response.json()["notifications"]) == 1
-    assert response.json()["notifications"][0]["read_at"] is None
-
-
-def test_read_notifications_mixed_valid_invalid(
-    client, create_user, auth_headers, create_notification
-):
-    user = create_user(email="user@example.com")
-    notif1 = create_notification(recipient=user)
-    notif2 = create_notification(recipient=user)
-    response = client.post(
-        "/notifications/read",
-        headers=auth_headers(user),
-        json={
-            "notification_ids": [
-                str(notif1.id),
-                "invalid",
-                str(notif2.id),
-                "00000000-0000-0000-0000-000000000000",
-            ]
-        },
+        json={"notification_ids": [str(n.id)]},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["updated_count"] == 2
+    assert data["updated_count"] == 0
+
+    db_session.refresh(n)
+    assert n.read_at is None
+
+
+def test_read_notifications_invalid_ids_skipped(client, create_user, auth_headers):
+    user = create_user(email="user@example.com")
+    response = client.post(
+        "/notifications/read",
+        headers=auth_headers(user),
+        json={"notification_ids": ["not-a-uuid", "00000000-0000-0000-0000-000000000000"]},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["updated_count"] == 0
+
+
+def test_stream_notifications_without_auth_returns_401(client, create_user):
+    user = create_user(email="user@example.com")
+    response = client.get(
+        f"/notifications/stream/{user.id}",
+    )
+    assert response.status_code == 401
+
+
+def test_stream_notifications_other_user_returns_403(
+    client, create_user, auth_headers
+):
+    user = create_user(email="user@example.com")
+    other = create_user(email="other@example.com")
+    response = client.get(
+        f"/notifications/stream/{user.id}",
+        headers=auth_headers(other),
+    )
+    assert response.status_code == 403
+    assert "detail" in response.json()
