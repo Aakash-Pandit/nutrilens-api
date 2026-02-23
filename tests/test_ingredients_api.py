@@ -163,3 +163,96 @@ def test_drop_ingredients_db_requires_admin(client, create_user, auth_headers):
         headers=auth_headers(user),
     )
     assert response.status_code == 403
+
+
+def test_analyze_ingredient_without_auth_returns_401(client, create_user, db_session):
+    user = create_user(email="uploader@example.com")
+    ing = Ingredient(
+        file_path="/tmp/test-analyze.jpg",
+        uploaded_by_id=user.id,
+    )
+    db_session.add(ing)
+    db_session.commit()
+    db_session.refresh(ing)
+    response = client.post(f"/ingredients/{ing.id}/analyze")
+    assert response.status_code == 401
+
+
+def test_analyze_ingredient_own_succeeds_202(
+    client, create_user, auth_headers, db_session, tmp_path
+):
+    user = create_user(email="uploader@example.com")
+    image_path = tmp_path / "ingredient.jpg"
+    image_path.write_bytes(_make_jpeg_bytes())
+    ing = Ingredient(
+        file_path=str(image_path),
+        uploaded_by_id=user.id,
+    )
+    db_session.add(ing)
+    db_session.commit()
+    db_session.refresh(ing)
+    response = client.post(
+        f"/ingredients/{ing.id}/analyze",
+        headers=auth_headers(user),
+    )
+    assert response.status_code == 202
+    data = response.json()
+    assert "message" in data
+    assert "task_id" in data
+    assert data["ingredient_id"] == str(ing.id)
+
+
+def test_analyze_ingredient_other_user_returns_403(
+    client, create_user, auth_headers, db_session, tmp_path
+):
+    owner = create_user(email="owner@example.com")
+    other = create_user(email="other@example.com")
+    image_path = tmp_path / "ingredient.jpg"
+    image_path.write_bytes(_make_jpeg_bytes())
+    ing = Ingredient(
+        file_path=str(image_path),
+        uploaded_by_id=owner.id,
+    )
+    db_session.add(ing)
+    db_session.commit()
+    db_session.refresh(ing)
+    response = client.post(
+        f"/ingredients/{ing.id}/analyze",
+        headers=auth_headers(other),
+    )
+    assert response.status_code == 403
+    assert "detail" in response.json()
+
+
+def test_analyze_ingredient_not_found_returns_404(client, create_user, auth_headers):
+    user = create_user(email="user@example.com")
+    response = client.post(
+        "/ingredients/00000000-0000-0000-0000-000000000000/analyze",
+        headers=auth_headers(user),
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Ingredient not found"
+
+
+def test_analyze_ingredient_already_completed_returns_202_with_message(
+    client, create_user, auth_headers, db_session, tmp_path
+):
+    user = create_user(email="uploader@example.com")
+    image_path = tmp_path / "ingredient.jpg"
+    image_path.write_bytes(_make_jpeg_bytes())
+    ing = Ingredient(
+        file_path=str(image_path),
+        uploaded_by_id=user.id,
+        ingredient_details="Some text",
+        ingredient_analysis={"ingredients": []},
+    )
+    db_session.add(ing)
+    db_session.commit()
+    db_session.refresh(ing)
+    response = client.post(
+        f"/ingredients/{ing.id}/analyze",
+        headers=auth_headers(user),
+    )
+    assert response.status_code == 202
+    data = response.json()
+    assert "already completed" in data["message"].lower()
