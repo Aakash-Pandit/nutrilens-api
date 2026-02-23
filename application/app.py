@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import Depends, FastAPI
@@ -8,11 +9,19 @@ from auth.backend import JWTAuthBackend
 from auth.dependencies import require_authenticated_user
 from database.db import drop_db, init_db
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
 app = FastAPI(
     title="Nutrilens AI API",
     description="API for managing Nutritions from food packaging using AI",
     version="1.0.0",
     dependencies=[Depends(require_authenticated_user)],
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -28,11 +37,6 @@ app.add_middleware(AuthenticationMiddleware, backend=JWTAuthBackend())
 import users.apis  # noqa: E402, F401
 import ingredients.apis  # noqa: E402, F401
 import notifications.apis  # noqa: E402, F401
-
-
-@app.on_event("startup")
-def on_startup():
-    init_db()
 
 
 @app.delete("/admin/drop-db")
