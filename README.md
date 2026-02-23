@@ -117,17 +117,17 @@ You will also need a **Cohere API key** to enable AI analysis.
 
 ---
 
-### 5.2. Clone and install dependencies
+### 5.2. Clone and run with Docker Compose
 
 ```bash
 git clone <this-repo-url>
 cd nutrilens-api
 
-python -m venv .venv
-source .venv/bin/activate  # on Windows: .venv\Scripts\activate
+# Build and start all services (API, Celery worker, Postgres, Redis)
+docker compose up --build -d
 
-pip install --upgrade pip
-pip install -r requirements.txt
+# To follow API logs
+docker compose logs -f fast-api
 ```
 
 ---
