@@ -168,6 +168,6 @@ async def message_stream(
 
     return EventSourceResponse(
         event_generator(),
-        ping=86400,  # 24h – keepalive is our unread_count every 15s
+        ping=86400,  # 24h – keepalive is our unread_count every 10 seconds
         send_timeout=60,
     )
