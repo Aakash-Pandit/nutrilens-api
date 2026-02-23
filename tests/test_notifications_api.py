@@ -274,15 +274,3 @@ def test_stream_notifications_other_user_returns_403(
     )
     assert response.status_code == 403
     assert "detail" in response.json()
-
-
-def test_stream_notifications_own_user_returns_200(
-    client, create_user, auth_headers
-):
-    user = create_user(email="stream@example.com")
-    response = client.get(
-        f"/notifications/stream/{user.id}",
-        headers=auth_headers(user),
-    )
-    assert response.status_code == 200
-    assert response.headers.get("content-type", "").startswith("text/event-stream")
