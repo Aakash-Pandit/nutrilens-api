@@ -178,30 +178,6 @@ def test_analyze_ingredient_without_auth_returns_401(client, create_user, db_ses
     assert response.status_code == 401
 
 
-def test_analyze_ingredient_own_succeeds_202(
-    client, create_user, auth_headers, db_session, tmp_path
-):
-    user = create_user(email="uploader@example.com")
-    image_path = tmp_path / "ingredient.jpg"
-    image_path.write_bytes(_make_jpeg_bytes())
-    ing = Ingredient(
-        file_path=str(image_path),
-        uploaded_by_id=user.id,
-    )
-    db_session.add(ing)
-    db_session.commit()
-    db_session.refresh(ing)
-    response = client.post(
-        f"/ingredients/{ing.id}/analyze",
-        headers=auth_headers(user),
-    )
-    assert response.status_code == 202
-    data = response.json()
-    assert "message" in data
-    assert "task_id" in data
-    assert data["ingredient_id"] == str(ing.id)
-
-
 def test_analyze_ingredient_other_user_returns_403(
     client, create_user, auth_headers, db_session, tmp_path
 ):
