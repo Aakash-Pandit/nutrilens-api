@@ -1,0 +1,52 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Testing / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+tests/
+
+# Uploads (mounted as volume at runtime)
+uploads/
+
+# Logs / debug artifacts
+*.log
+debug_*.jpg
+debug_*.png
+
+# Docs
+*.md
